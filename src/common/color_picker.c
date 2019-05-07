@@ -83,7 +83,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *dsc, con
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none)
+#pragma omp parallel default(none) shared(mean,mmin,mmax,width,box,pixel,w)
 #endif
   {
     const int tnum = dt_get_thread_num();
@@ -205,7 +205,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none)
+#pragma omp parallel default(none) shared(msum,mmin,mmax,cnt,box,roi,width,filters,pixel)
 #endif
   {
     const int tnum = dt_get_thread_num();
@@ -332,7 +332,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none)
+#pragma omp parallel default(none) shared(msum,mmin,mmax,cnt,box,roi,width,pixel,xtrans)
 #endif
   {
     const int tnum = dt_get_thread_num();

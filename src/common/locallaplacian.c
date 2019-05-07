@@ -114,7 +114,7 @@ static inline void gauss_expand(
     const int ht)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) collapse(2)
+#pragma omp parallel for default(none) schedule(static) shared(ht,wd,input,fine) collapse(2)
 #endif
   for(int j=1;j<((ht-1)&~1);j++)  // even ht: two px boundary. odd ht: one px.
     for(int i=1;i<((wd-1)&~1);i++)
@@ -151,7 +151,7 @@ static inline void gauss_reduce_sse2(
       float *const row = ringbuf + (rowj % 5)*stride;
       const float *const in = input + rowj*wd;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none)
+#pragma omp parallel for schedule(static) default(none) shared(cw,in,row)
 #endif
       for(int i=1;i<cw-1;i++)
         row[i] = 6*in[2*i] + 4*(in[2*i-1]+in[2*i+1]) + in[2*i-2] + in[2*i+2];
@@ -169,7 +169,7 @@ static inline void gauss_reduce_sse2(
                 *const row2 = rows[2], *const row3 = rows[3], *const row4 = rows[4];
     const __m128 four = _mm_set1_ps(4.f), scale = _mm_set1_ps(1.f/256.f);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none)
+#pragma omp parallel for schedule(static) default(none) shared(cw,row0,row1,row2,row3,row4,four,scale,out)
 #endif
     for(int i=0;i<=cw-8;i+=8)
     {
@@ -224,7 +224,7 @@ static inline void gauss_reduce(
   memset(coarse, 0, sizeof(float)*cw*ch);
   // direct 5x5 stencil only on required pixels:
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) collapse(2)
+#pragma omp parallel for schedule(static) default(none) shared(ch,cw,coarse,input,wd,w) collapse(2)
 #endif
   for(int j=1;j<ch-1;j++) for(int i=1;i<cw-1;i++)
     for(int jj=-2;jj<=2;jj++) for(int ii=-2;ii<=2;ii++)
@@ -251,7 +251,7 @@ static inline float *ll_pad_input(
   if(b && b->mode == 2)
   { // pad by preview buffer
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2) collapse(2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,ht,wd,input,out,max_supp) collapse(2)
 #endif // fill regular pixels:
     for(int j=0;j<ht;j++) for(int i=0;i<wd;i++)
       out[(j+max_supp)**wd2+i+max_supp] = input[stride*(wd*j+i)] * 0.01f; // L -> [0,1]
@@ -276,22 +276,22 @@ static inline float *ll_pad_input(
       out[*wd2*j+i] = b->pad0[b->pwd*py+px];\
     } } while(0)
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2, b) collapse(2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,b,max_supp,input,wd,out) collapse(2)
 #endif // left border
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=0;i<max_supp;i++)
       LL_FILL(input[stride*wd*(j-max_supp)]* 0.01f);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2, b) collapse(2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,b,max_supp,wd,input,out) collapse(2)
 #endif // right border
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=wd+max_supp;i<*wd2;i++)
       LL_FILL(input[stride*((j-max_supp)*wd+wd-1)] * 0.01f);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2, b) collapse(2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,b,max_supp,out) collapse(2)
 #endif // top border
     for(int j=0;j<max_supp;j++) for(int i=0;i<*wd2;i++)
       LL_FILL(out[*wd2*max_supp+i]);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2, b) collapse(2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,b,max_supp,ht,out) collapse(2)
 #endif // bottom border
     for(int j=max_supp+ht;j<*ht2;j++) for(int i=0;i<*wd2;i++)
       LL_FILL(out[*wd2*(max_supp+ht-1)+i]);
@@ -300,7 +300,7 @@ static inline float *ll_pad_input(
   else
   { // pad by replication:
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,ht,input,wd,out,max_supp)
 #endif
     for(int j=0;j<ht;j++)
     {
@@ -312,12 +312,12 @@ static inline float *ll_pad_input(
         out[(j+max_supp)**wd2+i] = input[stride*(j*wd+wd-1)] * 0.01f; // L -> [0,1]
     }
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,max_supp,out)
 #endif
     for(int j=0;j<max_supp;j++)
       memcpy(out + *wd2*j, out+max_supp**wd2, sizeof(float)**wd2);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic) default(none) shared(wd2, ht2)
+#pragma omp parallel for schedule(dynamic) default(none) shared(wd2,ht2,max_supp,ht,out)
 #endif
     for(int j=max_supp+ht;j<*ht2;j++)
       memcpy(out + *wd2*j, out + *wd2*(max_supp+ht-1), sizeof(float)**wd2);
@@ -452,7 +452,7 @@ void apply_curve_sse2(
 {
   // TODO: do all this in avx2 8-wide (should be straight forward):
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,in,w,h,padding,g,sigma,shadows,highlights,clarity) schedule(dynamic)
 #endif
   for(uint32_t j=padding;j<h-padding;j++)
   {
@@ -478,11 +478,11 @@ void apply_curve_sse2(
     for(int i=w-padding;i<w;i++) out2[i] = out2[w-padding-1];
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,w,padding) schedule(dynamic)
 #endif
   for(int j=0;j<padding;j++) memcpy(out + w*j, out+padding*w, sizeof(float)*w);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,w,h,padding) schedule(dynamic)
 #endif
   for(int j=h-padding;j<h;j++) memcpy(out + w*j, out+w*(h-padding-1), sizeof(float)*w);
 }
@@ -502,7 +502,7 @@ void apply_curve(
     const float clarity)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,in,w,h,padding,g,sigma,shadows,highlights,clarity) schedule(dynamic)
 #endif
   for(uint32_t j=padding;j<h-padding;j++)
   {
@@ -515,11 +515,11 @@ void apply_curve(
     for(int i=w-padding;i<w;i++) out2[i] = out2[w-padding-1];
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,w,padding) schedule(dynamic)
 #endif
   for(int j=0;j<padding;j++) memcpy(out + w*j, out+padding*w, sizeof(float)*w);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic)
+#pragma omp parallel for default(none) shared(out,w,h,padding) schedule(dynamic)
 #endif
   for(int j=h-padding;j<h;j++) memcpy(out + w*j, out+w*(h-padding-1), sizeof(float)*w);
 }
@@ -704,7 +704,7 @@ void local_laplacian_internal(
     gauss_expand(output[l+1], output[l], pw, ph);
     // go through all coefficients in the upsampled gauss buffer:
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) collapse(2) shared(w,h,buf,output,l,gamma,padded)
+#pragma omp parallel for default(none) schedule(static) collapse(2) shared(w,h,buf,output,l,gamma,padded,ph,pw,ht)
 #endif
     for(int j=0;j<ph;j++) for(int i=0;i<pw;i++)
     {
@@ -724,7 +724,7 @@ void local_laplacian_internal(
     }
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(w,output,buf)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(w,output,buf,ht,wd,max_supp,out,input)
 #endif
   for(int j=0;j<ht;j++) for(int i=0;i<wd;i++)
   {
